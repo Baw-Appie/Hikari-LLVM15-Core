@@ -2,15 +2,15 @@
 // [License](https://github.com/HikariObfuscator/Hikari/wiki/License).
 //===----------------------------------------------------------------------===//
 #include "llvm/Transforms/Obfuscation/StringEncryption.h"
+#include "llvm/Transforms/Obfuscation/CryptoUtils.h"
+#include "llvm/Transforms/Obfuscation/Utils.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/NoFolder.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Transforms/Obfuscation/CryptoUtils.h"
-#include "llvm/Transforms/Obfuscation/Obfuscation.h"
-#include "llvm/Transforms/Obfuscation/Utils.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/ModuleUtils.h"
 #include <unordered_set>
 
 using namespace llvm;
@@ -36,6 +36,10 @@ struct StringEncryption : public ModulePass {
   std::unordered_map<Constant *, SmallVector<unsigned int, 16>>
       unencryptedindex;
   SmallVector<GlobalVariable *, 32> genedgv;
+  std::unordered_map<GlobalVariable *,
+                     std::pair<GlobalVariable *, GlobalVariable *>>
+      globalOld2New;
+  std::unordered_set<GlobalVariable *> globalProcessedGVs;
   StringEncryption() : ModulePass(ID) { this->flag = true; }
 
   StringEncryption(bool flag) : ModulePass(ID) { this->flag = flag; }
@@ -92,6 +96,15 @@ struct StringEncryption : public ModulePass {
         encstatus[&F] = GV;
         HandleFunction(&F);
       }
+    for (GlobalVariable *GV : globalProcessedGVs) {
+      errs() << "Post-cleaning work: " << GV << "\n";
+      GV->removeDeadConstantUsers();
+      if (GV->getNumUses() == 0) {
+        GV->dropAllReferences();
+        GV->eraseFromParent();
+      }
+    }
+
     return true;
   }
 
@@ -236,6 +249,15 @@ struct StringEncryption : public ModulePass {
       if (GV->getInitializer()->isZeroValue() ||
           GV->getInitializer()->isNullValue())
         continue;
+      auto globalIt = globalOld2New.find(GV);
+      if (globalIt != globalOld2New.end()) {
+        errs() << "Found shared global variable: " << GV << "\n";
+        old2new[GV] = globalIt->second;
+        // 更新当前函数的GV2Keys和mgv2keys
+        GV2Keys[globalIt->second.second] = mgv2keys[globalIt->second.second];
+        mgv2keys[globalIt->second.second] = GV2Keys[globalIt->second.second];
+        continue; // 跳过生成新变量步骤
+      }
       ConstantDataSequential *CDS =
           dyn_cast<ConstantDataSequential>(GV->getInitializer());
       bool rust_string = !CDS;
@@ -362,6 +384,9 @@ struct StringEncryption : public ModulePass {
       GV2Keys[DecryptSpaceGV] = std::make_pair(KeyConst, EncryptedRawGV);
       mgv2keys[DecryptSpaceGV] = GV2Keys[DecryptSpaceGV];
       unencryptedindex[KeyConst] = unencryptedindex[GV];
+      globalOld2New[GV] = std::make_pair(EncryptedRawGV, DecryptSpaceGV);
+      globalProcessedGVs.insert(GV);
+      old2new[GV] = globalOld2New[GV];
     }
     // Now prepare ObjC new GV
     for (GlobalVariable *GV : objCStrings) {
@@ -449,19 +474,20 @@ struct StringEncryption : public ModulePass {
         }
       }
     }
+    // Cleanup at the end of encryption to avoid wild pointers
     // CleanUp Old Raw GVs
-    for (std::unordered_map<
-             GlobalVariable *,
-             std::pair<GlobalVariable *, GlobalVariable *>>::iterator iter =
-             old2new.begin();
-         iter != old2new.end(); ++iter) {
-      GlobalVariable *toDelete = iter->first;
-      toDelete->removeDeadConstantUsers();
-      if (toDelete->getNumUses() == 0) {
-        toDelete->dropAllReferences();
-        toDelete->eraseFromParent();
-      }
-    }
+    // for (std::unordered_map<
+    //          GlobalVariable *,
+    //          std::pair<GlobalVariable *, GlobalVariable *>>::iterator iter =
+    //          old2new.begin();
+    //      iter != old2new.end(); ++iter) {
+    //   GlobalVariable *toDelete = iter->first;
+    //   toDelete->removeDeadConstantUsers();
+    //   if (toDelete->getNumUses() == 0) {
+    //     toDelete->dropAllReferences();
+    //     toDelete->eraseFromParent();
+    //   }
+    // }
     GlobalVariable *StatusGV = encstatus[Func];
     /*
        - Split Original EntryPoint BB into A and C.

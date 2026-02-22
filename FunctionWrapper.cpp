@@ -3,6 +3,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Obfuscation/FunctionWrapper.h"
+#include "llvm/Transforms/Obfuscation/CryptoUtils.h"
+#include "llvm/Transforms/Obfuscation/Utils.h"
+#include "llvm/Transforms/Obfuscation/compat/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
@@ -10,9 +13,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Transforms/Obfuscation/CryptoUtils.h"
-#include "llvm/Transforms/Obfuscation/Utils.h"
-#include "llvm/Transforms/Obfuscation/compat/CallSite.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
 using namespace llvm;

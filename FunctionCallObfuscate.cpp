@@ -9,6 +9,8 @@
 #else
 #include "llvm/ADT/Triple.h"
 #endif
+#include "llvm/Transforms/Obfuscation/Utils.h"
+#include "llvm/Transforms/Obfuscation/compat/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
@@ -18,10 +20,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Obfuscation/Utils.h"
-#include "llvm/Transforms/Obfuscation/compat/CallSite.h"
 #include <fstream>
-#include <set>
 
 using namespace llvm;
 
@@ -239,8 +238,7 @@ struct FunctionCallObfuscate : public FunctionPass {
       }
       std::vector<Constant *> elements = {};
       for (unsigned int i = 0; i < CompilerUsed->getNumOperands(); i++) {
-        Constant *Op =
-            CompilerUsed->getAggregateElement(i);
+        Constant *Op = CompilerUsed->getAggregateElement(i);
         if (!Op->isNullValue())
           elements.emplace_back(Op);
       }
@@ -248,8 +246,7 @@ struct FunctionCallObfuscate : public FunctionPass {
         ConstantArray *NewCA = cast<ConstantArray>(
             ConstantArray::get(CompilerUsed->getType(), elements));
         CompilerUsedGV->setInitializer(NewCA);
-      }
-      else {
+      } else {
         CompilerUsedGV->dropAllReferences();
         CompilerUsedGV->eraseFromParent();
       }
@@ -312,8 +309,8 @@ struct FunctionCallObfuscate : public FunctionPass {
           // It's only safe to restrict our modification to external symbols
           // Otherwise stripped binary will crash
           if (!calledFunction->empty() ||
-              calledFunction->getName().equals("dlsym") ||
-              calledFunction->getName().equals("dlopen") ||
+              calledFunction->getName().equals_insensitive("dlsym") ||
+              calledFunction->getName().equals_insensitive("dlopen") ||
               calledFunction->isIntrinsic())
             continue;
 

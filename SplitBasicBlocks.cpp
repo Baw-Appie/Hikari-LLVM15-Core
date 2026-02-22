@@ -1,11 +1,11 @@
 // For open-source license, please refer to
 // [License](https://github.com/HikariObfuscator/Hikari/wiki/License).
 //===----------------------------------------------------------------------===//
-#include "llvm/IR/Instructions.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Obfuscation/CryptoUtils.h"
 #include "llvm/Transforms/Obfuscation/Split.h"
 #include "llvm/Transforms/Obfuscation/Utils.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
