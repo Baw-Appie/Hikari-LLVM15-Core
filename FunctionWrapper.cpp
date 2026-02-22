@@ -130,14 +130,17 @@ struct FunctionWrapper : public ModulePass {
         }
       }
     Value *retval = CallInst::Create(
-        CS->getFunctionType(),
-        ConstantExpr::getBitCast(cast<Function>(calledFunction),
-                                 CS->getCalledValue()->getType()),
-#if LLVM_VERSION_MAJOR >= 16
-        ArrayRef<Value *>(params), std::nullopt, "", BB);
-#else
-        ArrayRef<Value *>(params), None, "", BB);
-#endif
+        cast<Function>(calledFunction),
+        ArrayRef<Value *>(params), "", BB);
+//     Value *retval = CallInst::Create(
+//         CS->getFunctionType(),
+//         ConstantExpr::getBitCast(cast<Function>(calledFunction),
+//                                  CS->getCalledValue()->getType()),
+// #if LLVM_VERSION_MAJOR >= 16
+//         ArrayRef<Value *>(params), std::nullopt, "", BB);
+// #else
+//         ArrayRef<Value *>(params), None, "", BB);
+// #endif
     if (ft->getReturnType()->isVoidTy()) {
       ReturnInst::Create(BB->getContext(), BB);
     } else {

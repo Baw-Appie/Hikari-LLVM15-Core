@@ -138,7 +138,7 @@ struct AntiDebugging : public ModulePass {
     Function *ADBCallBack = F.getParent()->getFunction("ADBCallBack");
     Function *ADBInit = F.getParent()->getFunction("InitADB");
     if (ADBCallBack && ADBInit) {
-      CallInst::Create(ADBInit, "",
+      CallInst::Create(ADBInit, {}, "",
                        cast<Instruction>(EntryBlock->getFirstInsertionPt()));
     } else {
       errs() << "The ADBCallBack and ADBInit functions were not found\n";
@@ -149,7 +149,7 @@ struct AntiDebugging : public ModulePass {
         return false;
       if (triple.isOSDarwin() && triple.isAArch64()) {
         errs() << "Injecting Inline Assembly AntiDebugging For:"
-               << F.getParent()->getTargetTriple() << "\n";
+               << F.getParent()->getTargetTriple().str() << "\n";
         std::string antidebugasm = "";
         switch (cryptoutils->get_range(2)) {
         case 0: {
@@ -251,14 +251,10 @@ struct AntiDebugging : public ModulePass {
         Instruction *I = nullptr;
         for (BasicBlock &BB : F)
           I = BB.getTerminator();
-#if LLVM_VERSION_MAJOR >= 16
-        CallInst::Create(IA, std::nullopt, "", I);
-#else
-        CallInst::Create(IA, None, "", I);
-#endif
+        CallInst::Create(IA, {}, "", I);
       } else {
         errs() << "Unsupported Inline Assembly AntiDebugging Target: "
-               << F.getParent()->getTargetTriple() << "\n";
+               << F.getParent()->getTargetTriple().str() << "\n";
       }
     }
     return true;

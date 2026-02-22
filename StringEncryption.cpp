@@ -246,8 +246,7 @@ struct StringEncryption : public ModulePass {
         }
       }
     for (GlobalVariable *GV : rawStrings) {
-      if (GV->getInitializer()->isZeroValue() ||
-          GV->getInitializer()->isNullValue())
+      if (GV->getInitializer()->isNullValue())
         continue;
       auto globalIt = globalOld2New.find(GV);
       if (globalIt != globalOld2New.end()) {
@@ -441,7 +440,7 @@ struct StringEncryption : public ModulePass {
               if (GlobalVariable *GV2 =
                       dyn_cast<GlobalVariable>(CE->getOperand(0))) {
                 if (GV->getNumUses() <= 1 &&
-                    GV2->getGlobalIdentifier() == GV->getGlobalIdentifier())
+                    GV2->getName() == GV->getName())
                   PtrauthGV->getInitializer()->setOperand(
                       2, ConstantExpr::getPtrToInt(
                              M->getGlobalVariable(
@@ -451,7 +450,7 @@ struct StringEncryption : public ModulePass {
             } else if (GlobalVariable *GV2 = dyn_cast<GlobalVariable>(
                            PtrauthGV->getInitializer()->getOperand(2)))
               if (GV->getNumUses() <= 1 &&
-                  GV2->getGlobalIdentifier() == GV->getGlobalIdentifier())
+                  GV2->getName() == GV->getName())
                 PtrauthGV->getInitializer()->setOperand(
                     2, ConstantExpr::getPtrToInt(
                            M->getGlobalVariable(
@@ -509,7 +508,8 @@ struct StringEncryption : public ModulePass {
     ReplaceInstWithInst(A->getTerminator(), newBr);
     // Insert DecryptionCode
     HandleDecryptionBlock(B, C, GV2Keys);
-    IRBuilder<> IRB(A->getFirstNonPHIOrDbgOrLifetime());
+    IRBuilder<> IRB(A);
+    IRB.SetInsertPoint(A->getFirstNonPHIOrDbgOrLifetime());
     // Add atomic load checking status in A
     LoadInst *LI = IRB.CreateLoad(StatusGV->getValueType(), StatusGV,
                                   "LoadEncryptionStatus");

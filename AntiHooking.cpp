@@ -331,9 +331,9 @@ struct AntiHook : public ModulePass {
     Type *Int8PtrTy = Type::getInt8Ty(M->getContext())->getPointerTo();
 
     Value *GetClass = IRBA.CreateCall(M->getFunction("objc_getClass"),
-                                      {IRBA.CreateGlobalStringPtr(classname)});
+                                      {IRBA.CreateGlobalString(classname)});
     Value *GetSelector = IRBA.CreateCall(M->getFunction("sel_registerName"),
-                                         {IRBA.CreateGlobalStringPtr(selname)});
+                                         {IRBA.CreateGlobalString(selname)});
     Value *GetMethod =
         IRBA.CreateCall(M->getFunction(classmethod ? "class_getClassMethod"
                                                    : "class_getInstanceMethod"),
