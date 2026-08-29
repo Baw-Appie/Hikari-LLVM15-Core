@@ -58,11 +58,9 @@ struct AntiClassDump : public ModulePass {
           << " is Not Supported For LLVM AntiClassDump\nProbably GNU Step?\n";
       return false;
     }
-    Type *Int8PtrTy = Type::getInt8Ty(M.getContext())->getPointerTo();
+    Type *Int8PtrTy = PointerType::getUnqual(M.getContext());
     // Generic ObjC Runtime Declarations
-    FunctionType *IMPType =
-        FunctionType::get(Int8PtrTy, {Int8PtrTy, Int8PtrTy}, true);
-    PointerType *IMPPointerType = PointerType::getUnqual(IMPType);
+    PointerType *IMPPointerType = PointerType::getUnqual(M.getContext());
     FunctionType *class_replaceMethod_type = FunctionType::get(
         IMPPointerType, {Int8PtrTy, Int8PtrTy, IMPPointerType, Int8PtrTy},
         false);
@@ -187,8 +185,6 @@ struct AntiClassDump : public ModulePass {
   splitclass_ro_t(ConstantStruct *class_ro,
                   Module *M) { // Split a class_ro_t structure
     std::unordered_map<std::string, Value *> info;
-    StructType *objc_method_list_t_type =
-        StructType::getTypeByName(M->getContext(), "struct.__method_list_t");
     for (unsigned i = 0; i < class_ro->getType()->getNumElements(); i++) {
       Constant *tmp = dyn_cast<Constant>(class_ro->getAggregateElement(i));
       if (tmp->isNullValue()) {
@@ -196,7 +192,7 @@ struct AntiClassDump : public ModulePass {
       }
       Type *type = tmp->getType();
       if ((!opaquepointers &&
-           type == PointerType::getUnqual(objc_method_list_t_type)) ||
+           type == PointerType::getUnqual(M->getContext())) ||
           (opaquepointers &&
 #if LLVM_VERSION_MAJOR >= 18
            (tmp->getName().starts_with("_OBJC_$_INSTANCE_METHODS") ||
@@ -341,10 +337,7 @@ struct AntiClassDump : public ModulePass {
       appendToCompilerUsed(*M, {newMethodStructGV});
       newMethodStructGV->copyAttributesFrom(methodListGV);
       Constant *bitcastExpr = ConstantExpr::getBitCast(
-          newMethodStructGV,
-          opaquepointers ? newType->getPointerTo()
-                         : PointerType::getUnqual(StructType::getTypeByName(
-                               M->getContext(), "struct.__method_list_t")));
+          newMethodStructGV, PointerType::getUnqual(M->getContext()));
       metaclassCS->handleOperandChange(metaclassCS->getAggregateElement(5),
                                        opaquepointers ? newMethodStructGV
                                                       : bitcastExpr);
@@ -436,10 +429,7 @@ struct AntiClassDump : public ModulePass {
       newMethodStructGV->copyAttributesFrom(methodListGV);
     }
     Constant *bitcastExpr = ConstantExpr::getBitCast(
-        newMethodStructGV,
-        opaquepointers ? newType->getPointerTo()
-                       : PointerType::getUnqual(StructType::getTypeByName(
-                             M->getContext(), "struct.__method_list_t")));
+        newMethodStructGV, PointerType::getUnqual(M->getContext()));
     opaquepointers ? classCS->setOperand(5, bitcastExpr)
                    : classCS->handleOperandChange(
                          classCS->getAggregateElement(5), bitcastExpr);
@@ -460,8 +450,6 @@ struct AntiClassDump : public ModulePass {
     Function *class_replaceMethod = M->getFunction("class_replaceMethod");
     Function *class_getName = M->getFunction("class_getName");
     Function *objc_getMetaClass = M->getFunction("objc_getMetaClass");
-    StructType *objc_method_list_t_type =
-        StructType::getTypeByName(M->getContext(), "struct.__method_list_t");
     for (unsigned int i = 0; i < class_ro->getType()->getNumElements(); i++) {
       Constant *tmp = dyn_cast<Constant>(class_ro->getAggregateElement(i));
       if (tmp->isNullValue()) {
@@ -469,7 +457,7 @@ struct AntiClassDump : public ModulePass {
       }
       Type *type = tmp->getType();
       if ((!opaquepointers &&
-           type == PointerType::getUnqual(objc_method_list_t_type)) ||
+           type == PointerType::getUnqual(M->getContext())) ||
           (opaquepointers &&
 #if LLVM_VERSION_MAJOR >= 18
            (tmp->getName().starts_with("_OBJC_$_INSTANCE_METHODS") ||

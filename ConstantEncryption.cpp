@@ -250,7 +250,8 @@ struct ConstantEncryption : public ModulePass {
               GlobalValue::LinkageTypes::PrivateLinkage,
               ConstantInt::get(CI->getType(), CI->getValue()), "CToGV");
           appendToCompilerUsed(*F.getParent(), GV);
-          I.setOperand(i, new LoadInst(GV->getValueType(), GV, "", &I));
+          I.setOperand(i,
+                       new LoadInst(GV->getValueType(), GV, "", I.getIterator()));
         }
       }
     }
@@ -333,7 +334,7 @@ struct ConstantEncryption : public ModulePass {
         }
       } else if (StoreInst *SI = dyn_cast<StoreInst>(U)) {
         XORInst = BinaryOperator::Create(Instruction::Xor, SI->getOperand(0),
-                                         XORKey, "", SI);
+                                         XORKey, "", SI->getIterator());
         SI->replaceUsesOfWith(SI->getValueOperand(), XORInst);
       }
       if (XORInst && SubstituteXorTemp &&
@@ -350,7 +351,7 @@ struct ConstantEncryption : public ModulePass {
     if (!Key || !New)
       return;
     BinaryOperator *NewOperand =
-        BinaryOperator::Create(Instruction::Xor, New, Key, "", I);
+        BinaryOperator::Create(Instruction::Xor, New, Key, "", I->getIterator());
 
     I->setOperand(opindex, NewOperand);
     if (SubstituteXorTemp &&

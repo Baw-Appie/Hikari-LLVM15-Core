@@ -121,7 +121,7 @@ struct FunctionWrapper : public ModulePass {
             BasicBlock::iterator InsertPoint = BB->begin();
             while (isa<AllocaInst>(InsertPoint))
               ++InsertPoint;
-            AI = new AllocaInst(arg.getType(), 0, "", &*InsertPoint);
+            AI = new AllocaInst(arg.getType(), 0, "", InsertPoint);
           } else
             AI = new AllocaInst(arg.getType(), 0, "", BB);
           new StoreInst(&arg, AI, BB);

@@ -85,14 +85,14 @@ struct IndirectBranch : public FunctionPass {
                         Type::getInt8Ty(M.getContext()),
                         ConstantExpr::getBitCast(
                             BlockAddress::get(&BB),
-                            Type::getInt8Ty(M.getContext())->getPointerTo()),
+                            PointerType::getUnqual(M.getContext())),
                         encmap[&F])
                   : BlockAddress::get(&BB));
         }
     }
     if (to_obf_funcs.size()) {
-      ArrayType *AT = ArrayType::get(
-          Type::getInt8Ty(M.getContext())->getPointerTo(), BBs.size());
+      ArrayType *AT =
+          ArrayType::get(PointerType::getUnqual(M.getContext()), BBs.size());
       Constant *BlockAddressArray =
           ConstantArray::get(AT, ArrayRef<Constant *>(BBs));
       GlobalVariable *Table = new GlobalVariable(
@@ -111,20 +111,23 @@ struct IndirectBranch : public FunctionPass {
         to_obf_funcs.end())
       return false;
     errs() << "Running IndirectBranch On " << Func.getName() << "\n";
-    SmallVector<BranchInst *, 32> BIs;
+    SmallVector<Instruction *, 32> BIs;
     for (Instruction &Inst : instructions(Func))
-      if (BranchInst *BI = dyn_cast<BranchInst>(&Inst))
+      if (CondBrInst *BI = dyn_cast<CondBrInst>(&Inst))
+        BIs.emplace_back(BI);
+      else if (UncondBrInst *BI = dyn_cast<UncondBrInst>(&Inst))
         BIs.emplace_back(BI);
 
     Type *Int8Ty = Type::getInt8Ty(M->getContext());
     Type *Int32Ty = Type::getInt32Ty(M->getContext());
-    Type *Int8PtrTy = Type::getInt8Ty(M->getContext())->getPointerTo();
+    Type *Int8PtrTy = PointerType::getUnqual(M->getContext());
 
     Value *zero = ConstantInt::get(Int32Ty, 0);
 
     IRBuilder<NoFolder> *IRBEntry =
         new IRBuilder<NoFolder>(&Func.getEntryBlock().front());
-    for (BranchInst *BI : BIs) {
+    for (Instruction *BI : BIs) {
+      const bool IsConditionalBr = BI->getNumSuccessors() > 1;
       if (UseStackTemp &&
           IRBEntry->GetInsertPoint() !=
               (BasicBlock::iterator)Func.getEntryBlock().front())
@@ -134,13 +137,13 @@ struct IndirectBranch : public FunctionPass {
       // We use the condition's evaluation result to generate the GEP
       // instruction  False evaluates to 0 while true evaluates to 1.  So here
       // we insert the false block first
-      if (BI->isConditional() && !BI->getSuccessor(1)->isEntryBlock())
+      if (IsConditionalBr && !BI->getSuccessor(1)->isEntryBlock())
         BBs.emplace_back(BI->getSuccessor(1));
       if (!BI->getSuccessor(0)->isEntryBlock())
         BBs.emplace_back(BI->getSuccessor(0));
 
       GlobalVariable *LoadFrom = nullptr;
-      if (BI->isConditional() ||
+      if (IsConditionalBr ||
           indexmap.find(BI->getSuccessor(0)) == indexmap.end()) {
         ArrayType *AT = ArrayType::get(Int8PtrTy, BBs.size());
         SmallVector<Constant *, 2> BlockAddresses;
@@ -168,8 +171,8 @@ struct IndirectBranch : public FunctionPass {
         IRBEntry->CreateStore(LoadFrom, LoadFromAI);
       }
       Value *index, *RealIndex = nullptr;
-      if (BI->isConditional()) {
-        Value *condition = BI->getCondition();
+      if (IsConditionalBr) {
+        Value *condition = cast<CondBrInst>(BI)->getCondition();
         Value *zext = IRBBI->CreateZExt(condition, Int32Ty);
         if (UseStackTemp) {
           AllocaInst *condAI = IRBEntry->CreateAlloca(Int32Ty);
@@ -213,8 +216,9 @@ struct IndirectBranch : public FunctionPass {
             IRBBI->CreateLoad(LoadFrom->getType(), LoadFromAI);
         Value *GEP = IRBBI->CreateGEP(
             LoadFrom->getValueType(), LILoadFrom,
-            {zero, BI->isConditional() ? IRBBI->CreateLoad(Int32Ty, RealIndex)
-                                       : RealIndex});
+            {zero,
+             IsConditionalBr ? IRBBI->CreateLoad(Int32Ty, RealIndex)
+                            : RealIndex});
         if (!EncryptJumpTargetTemp)
           LI = IRBBI->CreateLoad(Int8PtrTy, GEP,
                                  "IndirectBranchingTargetAddress");

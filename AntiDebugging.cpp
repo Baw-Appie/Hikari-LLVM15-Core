@@ -138,8 +138,7 @@ struct AntiDebugging : public ModulePass {
     Function *ADBCallBack = F.getParent()->getFunction("ADBCallBack");
     Function *ADBInit = F.getParent()->getFunction("InitADB");
     if (ADBCallBack && ADBInit) {
-      CallInst::Create(ADBInit, {}, "",
-                       cast<Instruction>(EntryBlock->getFirstInsertionPt()));
+      CallInst::Create(ADBInit, {}, "", EntryBlock->getFirstInsertionPt());
     } else {
       errs() << "The ADBCallBack and ADBInit functions were not found\n";
       if (!F.getReturnType()
@@ -251,7 +250,7 @@ struct AntiDebugging : public ModulePass {
         Instruction *I = nullptr;
         for (BasicBlock &BB : F)
           I = BB.getTerminator();
-        CallInst::Create(IA, {}, "", I);
+        CallInst::Create(IA->getFunctionType(), IA, {}, "", I->getIterator());
       } else {
         errs() << "Unsupported Inline Assembly AntiDebugging Target: "
                << F.getParent()->getTargetTriple().str() << "\n";

@@ -73,11 +73,9 @@ struct FunctionCallObfuscate : public FunctionPass {
     }
     this->triple = Triple(M.getTargetTriple());
     if (triple.getVendor() == Triple::VendorType::Apple) {
-      Type *Int8PtrTy = Type::getInt8Ty(M.getContext())->getPointerTo();
+      Type *Int8PtrTy = PointerType::getUnqual(M.getContext());
       // Generic ObjC Runtime Declarations
-      FunctionType *IMPType =
-          FunctionType::get(Int8PtrTy, {Int8PtrTy, Int8PtrTy}, true);
-      PointerType *IMPPointerType = PointerType::get(IMPType, 0);
+      PointerType *IMPPointerType = PointerType::getUnqual(M.getContext());
       FunctionType *class_replaceMethod_type = FunctionType::get(
           IMPPointerType, {Int8PtrTy, Int8PtrTy, IMPPointerType, Int8PtrTy},
           false);
@@ -267,7 +265,7 @@ struct FunctionCallObfuscate : public FunctionPass {
     FixFunctionConstantExpr(&F);
     HandleObjC(&F);
     Type *Int32Ty = Type::getInt32Ty(M->getContext());
-    Type *Int8PtrTy = Type::getInt8Ty(M->getContext())->getPointerTo();
+    Type *Int8PtrTy = PointerType::getUnqual(M->getContext());
     // ObjC Runtime Declarations
     FunctionType *dlopen_type = FunctionType::get(
         Int8PtrTy, {Int8PtrTy, Int32Ty},

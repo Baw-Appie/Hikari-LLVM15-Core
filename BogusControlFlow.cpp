@@ -375,10 +375,10 @@ struct BogusControlFlow : public FunctionPass {
 
     // Jump to the original basic block if the condition is true or
     // to the altered block if false.
-    BranchInst::Create(originalBB, alteredBB, condition, basicBlock);
+    CondBrInst::Create(condition, originalBB, alteredBB, basicBlock);
 
     // The altered block loop back on the original one.
-    BranchInst::Create(originalBB, alteredBB);
+    UncondBrInst::Create(originalBB, alteredBB);
 
     // The end of the originalBB is modified to give the impression that
     // sometimes it continues in the loop, and sometimes it return the desired
@@ -408,11 +408,11 @@ struct BogusControlFlow : public FunctionPass {
     // This is achieved by jumping to a random BB
     switch (cryptoutils->get_range(2)) {
     case 0: {
-      BranchInst::Create(originalBBpart2, originalBB, condition2, originalBB);
-      break;
-    }
+        CondBrInst::Create(condition2, originalBBpart2, originalBB, originalBB);
+        break;
+      }
     case 1: {
-      BranchInst::Create(originalBBpart2, alteredBB, condition2, originalBB);
+      CondBrInst::Create(condition2, originalBBpart2, alteredBB, originalBB);
       break;
     }
     default:
@@ -494,19 +494,19 @@ struct BogusControlFlow : public FunctionPass {
               case 0:                              // do nothing
                 break;
               case 1:
-                op = BinaryOperator::CreateNeg(i->getOperand(0), *var, &*i);
+                op = BinaryOperator::CreateNeg(i->getOperand(0), *var, i);
                 op1 = BinaryOperator::Create(Instruction::Add, op,
-                                             i->getOperand(1), "gen", &*i);
+                                             i->getOperand(1), "gen", i);
                 break;
               case 2:
                 op1 = BinaryOperator::Create(Instruction::Sub, i->getOperand(0),
-                                             i->getOperand(1), *var, &*i);
+                                             i->getOperand(1), *var, i);
                 op = BinaryOperator::Create(Instruction::Mul, op1,
-                                            i->getOperand(1), "gen", &*i);
+                                            i->getOperand(1), "gen", i);
                 break;
               case 3:
                 op = BinaryOperator::Create(Instruction::Shl, i->getOperand(0),
-                                            i->getOperand(1), *var, &*i);
+                                            i->getOperand(1), *var, i);
                 break;
               }
             }
@@ -521,15 +521,15 @@ struct BogusControlFlow : public FunctionPass {
               case 0:                              // do nothing
                 break;
               case 1:
-                op = UnaryOperator::CreateFNeg(i->getOperand(0), *var, &*i);
+                op = UnaryOperator::CreateFNeg(i->getOperand(0), *var, i);
                 op1 = BinaryOperator::Create(Instruction::FAdd, op,
-                                             i->getOperand(1), "gen", &*i);
+                                             i->getOperand(1), "gen", i);
                 break;
               case 2:
                 op = BinaryOperator::Create(Instruction::FSub, i->getOperand(0),
-                                            i->getOperand(1), *var, &*i);
+                                            i->getOperand(1), *var, i);
                 op1 = BinaryOperator::Create(Instruction::FMul, op,
-                                             i->getOperand(1), "gen", &*i);
+                                             i->getOperand(1), "gen", i);
                 break;
               }
             }
@@ -701,14 +701,12 @@ struct BogusControlFlow : public FunctionPass {
     // Looking for the conditions and branches to transform
     for (BasicBlock &BB : F) {
       Instruction *tbb = BB.getTerminator();
-      if (BranchInst *br = dyn_cast<BranchInst>(tbb)) {
-        if (br->isConditional()) {
-          ICmpInst *cond = dyn_cast<ICmpInst>(br->getCondition());
-          if (cond && std::find(needtoedit.begin(), needtoedit.end(), cond) !=
-                          needtoedit.end()) {
-            toDelete.emplace_back(cond); // The condition
-            toEdit.emplace_back(tbb);    // The branch using the condition
-          }
+      if (CondBrInst *br = dyn_cast<CondBrInst>(tbb)) {
+        ICmpInst *cond = dyn_cast<ICmpInst>(br->getCondition());
+        if (cond && std::find(needtoedit.begin(), needtoedit.end(), cond) !=
+                        needtoedit.end()) {
+          toDelete.emplace_back(cond); // The condition
+          toEdit.emplace_back(tbb);    // The branch using the condition
         }
       }
     }
@@ -738,7 +736,7 @@ struct BogusControlFlow : public FunctionPass {
         BasicBlock *opEntryBlock =
             BasicBlock::Create(opFunction->getContext(), "", opFunction);
         // Insert a br to make it can be obfuscated by IndirectBranch
-        BranchInst::Create(opEntryBlock, opTrampBlock);
+        UncondBrInst::Create(opEntryBlock, opTrampBlock);
         writeAnnotationMetadata(opFunction, "bcfopfunc");
         IRBOp = new IRBuilder<>(opEntryBlock);
       }
@@ -796,15 +794,14 @@ struct BogusControlFlow : public FunctionPass {
       ReturnInst *RI = IRBEmu.CreateRet(emuLast);
       ConstantInt *emuCI = cast<ConstantInt>(RI->getReturnValue());
       APInt emulateResult = emuCI->getValue();
+      CondBrInst *br = cast<CondBrInst>(i);
       if (emulateResult == 1) {
         // Our ConstantExpr evaluates to true;
-        BranchInst::Create(((BranchInst *)i)->getSuccessor(0),
-                           ((BranchInst *)i)->getSuccessor(1), Last,
+        CondBrInst::Create(Last, br->getSuccessor(0), br->getSuccessor(1),
                            i->getParent());
       } else {
         // False, swap operands
-        BranchInst::Create(((BranchInst *)i)->getSuccessor(1),
-                           ((BranchInst *)i)->getSuccessor(0), Last,
+        CondBrInst::Create(Last, br->getSuccessor(1), br->getSuccessor(0),
                            i->getParent());
       }
       emuFunction->eraseFromParent();

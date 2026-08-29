@@ -65,7 +65,8 @@ void Flattening::flatten(Function *f) {
                 "for flattening in the open-source version of Hikari.\n";
       return;
     }
-    if (!isa<BranchInst>(BB.getTerminator()) &&
+    if (!(isa<UncondBrInst>(BB.getTerminator()) ||
+          isa<CondBrInst>(BB.getTerminator())) &&
         !isa<ReturnInst>(BB.getTerminator()))
       return;
     origBB.emplace_back(&BB);
@@ -83,13 +84,8 @@ void Flattening::flatten(Function *f) {
   BasicBlock *insert = &*tmp;
 
   // If main begin with an if
-  BranchInst *br = nullptr;
-  if (isa<BranchInst>(insert->getTerminator()))
-    br = cast<BranchInst>(insert->getTerminator());
-
-  if ((br && br->isConditional()) ||
-      insert->getTerminator()->getNumSuccessors() > 1) {
-    BasicBlock::iterator i = insert->end();
+  if (insert->getTerminator()->getNumSuccessors() > 1) {
+      BasicBlock::iterator i = insert->end();
     --i;
 
     if (insert->size() > 1) {
@@ -105,10 +101,11 @@ void Flattening::flatten(Function *f) {
 
   // Create switch variable and set as it
   switchVar = new AllocaInst(Type::getInt32Ty(f->getContext()),
-                             DL.getAllocaAddrSpace(), "switchVar", oldTerm);
+                             DL.getAllocaAddrSpace(), "switchVar",
+                             oldTerm->getIterator());
   switchVarAddr =
-      new AllocaInst(Type::getInt32Ty(f->getContext())->getPointerTo(),
-                     DL.getAllocaAddrSpace(), "", oldTerm);
+      new AllocaInst(PointerType::getUnqual(f->getContext()),
+                     DL.getAllocaAddrSpace(), "", oldTerm->getIterator());
 
   // Remove jump
   oldTerm->eraseFromParent();
@@ -127,14 +124,14 @@ void Flattening::flatten(Function *f) {
 
   // Move first BB on top
   insert->moveBefore(loopEntry);
-  BranchInst::Create(loopEntry, insert);
+  UncondBrInst::Create(loopEntry, insert);
 
   // loopEnd jump to loopEntry
-  BranchInst::Create(loopEntry, loopEnd);
+  UncondBrInst::Create(loopEntry, loopEnd);
 
   BasicBlock *swDefault =
       BasicBlock::Create(f->getContext(), "switchDefault", f, loopEnd);
-  BranchInst::Create(loopEnd, swDefault);
+  UncondBrInst::Create(loopEnd, swDefault);
 
   // Create switch instruction itself and set condition
   switchI = SwitchInst::Create(&*f->begin(), swDefault, 0, loopEntry);
@@ -143,7 +140,7 @@ void Flattening::flatten(Function *f) {
   // Remove branch jump from 1st BB and make a jump to the while
   f->begin()->getTerminator()->eraseFromParent();
 
-  BranchInst::Create(loopEntry, &*f->begin());
+  UncondBrInst::Create(loopEntry, &*f->begin());
 
   // Put BB in the switch
   for (BasicBlock *i : origBB) {
@@ -185,7 +182,7 @@ void Flattening::flatten(Function *f) {
           numCase,
           new LoadInst(switchVarAddr->getAllocatedType(), switchVarAddr, "", i),
           i);
-      BranchInst::Create(loopEnd, i);
+      UncondBrInst::Create(loopEnd, i);
       continue;
     }
 
@@ -213,10 +210,10 @@ void Flattening::flatten(Function *f) {
       }
 
       // Create a SelectInst
-      BranchInst *br = cast<BranchInst>(i->getTerminator());
+      CondBrInst *br = cast<CondBrInst>(i->getTerminator());
       SelectInst *sel =
           SelectInst::Create(br->getCondition(), numCaseTrue, numCaseFalse, "",
-                             i->getTerminator());
+                             i->getTerminator()->getIterator());
 
       // Erase terminator
       i->getTerminator()->eraseFromParent();
@@ -225,7 +222,7 @@ void Flattening::flatten(Function *f) {
           sel,
           new LoadInst(switchVarAddr->getAllocatedType(), switchVarAddr, "", i),
           i);
-      BranchInst::Create(loopEnd, i);
+      UncondBrInst::Create(loopEnd, i);
       continue;
     }
   }

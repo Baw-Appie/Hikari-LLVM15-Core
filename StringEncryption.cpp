@@ -504,7 +504,7 @@ struct StringEncryption : public ModulePass {
         BasicBlock::Create(Func->getContext(), "StringDecryptionBB", Func, C);
     // Change A's terminator to jump to B
     // We'll add new terminator to jump C later
-    BranchInst *newBr = BranchInst::Create(B);
+    UncondBrInst *newBr = UncondBrInst::Create(B);
     ReplaceInstWithInst(A->getTerminator(), newBr);
     // Insert DecryptionCode
     HandleDecryptionBlock(B, C, GV2Keys);
@@ -519,7 +519,7 @@ struct StringEncryption : public ModulePass {
     Value *condition = IRB.CreateICmpEQ(
         LI, ConstantInt::get(Type::getInt32Ty(Func->getContext()), 0));
     A->getTerminator()->eraseFromParent();
-    BranchInst::Create(B, C, condition, A);
+    CondBrInst::Create(condition, B, C, A);
     // Add StoreInst atomically in C start
     // No matter control flow is coming from A or B, the GVs must be decrypted
     StoreInst *SI =
@@ -575,7 +575,7 @@ struct StringEncryption : public ModulePass {
             0,
             ConstantExpr::getBitCast(
                 NewPtrauthGV,
-                Type::getInt32Ty(NewPtrauthGV->getContext())->getPointerTo()));
+                PointerType::getUnqual(NewPtrauthGV->getContext())));
       }
     }
     return ObjcGV;
